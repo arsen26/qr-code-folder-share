@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get your photos - ANNA PHOTOGRAPHERS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #121212;
+            color: #f2f2f2;
+            font-family: 'Poppins', sans-serif;
+            text-align: center;
+        }
+        #download-progress {
+            width: 0%; 
+            background: linear-gradient(90deg, #4CAF50, #81C784); 
+            height: 12px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); 
+            transition: width 0.3s ease;
+        }
+        h3 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin: 0px 0;
+            color: #00bcd4;
+        }
+        .qr-container {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .qr-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            width: 240px;
+            height: 350px;
+            justify-content: space-between;
+        }
+        .qr-box:hover {
+            transform: translateY(-10px);
+            box-shadow: 0px 15px 40px rgba(0, 255, 255, 0.2);
+        }
+        img {
+            width: 220px;
+            height: 220px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 12px rgba(255, 255, 255, 0.1);
+            transition: box-shadow 0.3s ease;
+        }
+        img:hover {
+            box-shadow: 0px 8px 20px rgba(255, 255, 255, 0.3);
+        }
+        h2 {
+            margin-bottom: 5px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #00bcd4;
+        }
+        footer {
+            position: absolute;
+            bottom: 20px;
+            font-size: 0.875rem;
+            color: #aaa;
+        }
+        .progress-container {
+            margin-top: 0px;
+            text-align: center;
+        }
+        .progress-text {
+            font-size: 1.2rem;
+            color: #ffffff;
+            font-weight: 600;
+        }
+        .success-message {
+            margin-top: 5px;
+            font-size: 1.2rem;
+            color: #4CAF50;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <img src="logo-inverted.png" alt="Anna Photographers Logo" style="width: 100px; height: 100px; border-radius: 50%; border: 1px solid #00bcd4;">
+        <h3>Anna Photographers</h3>
+    </div>
+    <div class="qr-container">
+        <div class="qr-box">          
+            <h2>Android ZIP</h2>
+            <img id="qrAndroid" src="" alt="QR Code Android">
+        </div>
+        <div class="qr-box">
+            <h2>iPhone Files</h2>
+            <img id="qrIphone" src="" alt="QR Code iPhone">
+        </div>
+    </div>
+    <div id="folder-name"></div>
+    <div class="progress-container">
+        <p id="progress-text" class="progress-text">0%</p>
+        <div id="download-progress"></div>
+        <div id="success-message" class="success-message">Transferimi u krye me sukses!</div>
+    </div>
+    <footer>
+        &copy; 2025 Anna Photographers. All rights reserved.
+    </footer>
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        ipcRenderer.on('update-qr-codes', (event, qrCodes) => {
+            document.getElementById('qrAndroid').src = qrCodes.android;
+            document.getElementById('qrIphone').src = qrCodes.iphone;
+            document.getElementById('folder-name').innerHTML = `<h4>${qrCodes.folderName}</h4>`;
+        });
+
+        ipcRenderer.on('download-progress', (event, percent) => {
+            document.getElementById('progress-text').textContent = `${Math.round(percent)}%`;
+            document.getElementById('download-progress').style.width = `${percent}%`;
+        });
+
+        ipcRenderer.on('download-complete', (event, message) => {
+            document.getElementById('success-message').textContent = message;
+            document.getElementById('success-message').style.display = 'block';
+        });
+    </script>
+</body>
+</html>
