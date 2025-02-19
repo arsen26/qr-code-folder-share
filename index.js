@@ -1,5 +1,5 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const express = require('express');
+const { app, BrowserWindow, ipcMain, dialog,screen  } = require('electron');
+const expressSrv = require('express');
 const qrcode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
@@ -9,33 +9,73 @@ const net = require('net'); // Shto këtë import në fillim të skedarit tuaj
 
 let mainWindow;
 let server;
-const expressApp = express();
+let selectedPort = null;
+const expressApp = expressSrv();
+app.commandLine.appendSwitch('disable-features', 'AutofillServerCommunication, AutofillEnablePayments');
 
 // Funksioni për krijimin e dritares
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const mainWindow = new BrowserWindow({
     width: 800,
-    height: 600,
+    height: 900,
     webPreferences: {
-      nodeIntegration: true, // Aktivizon Node.js në procesin e renderimit
-      contextIsolation: false, // Çaktivizon izolimin për të përdorur `require` direkt
-      enableRemoteModule: true, // Opsionale: përdoret për module të vjetra
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: true,
     },
-     });
-  // mainWindow.webContents.on('did-finish-load', () => {
-  //   mainWindow.webContents.openDevTools();
-  // });
-    mainWindow.loadFile('index.html');
+  });
+  mainWindow.loadFile('index.html');
+  return mainWindow;
 }
 console.log('Main process is running');
 
+function createSecondaryWindow(qrCodeData) {
+  const displays = screen.getAllDisplays();
+
+  // Kontrollo nëse ka më shumë se një ekran
+  let targetDisplay;
+  if (displays.length > 1) {
+    // Merr ekranin e dytë
+    targetDisplay = displays[0];
+    console.log(targetDisplay)
+  } else {
+    // Nëse ka vetëm një ekran, merr më të voglin
+    targetDisplay = displays.reduce((prev, curr) => {
+      return prev.bounds.width * prev.bounds.height < curr.bounds.width * curr.bounds.height ? prev : curr;
+    });    
+    console.log(targetDisplay)
+
+  }
+
+  console.log(`Opening secondary window on display:`, targetDisplay);
+
+  const secondaryWindow = new BrowserWindow({
+    width: targetDisplay.bounds.width,
+    height: targetDisplay.bounds.height,
+    x: targetDisplay.bounds.x, 
+    y: targetDisplay.bounds.y,
+    fullscreen: true, 
+    alwaysOnTop: true,
+    frame: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: true,
+    },
+  });
+
+  return secondaryWindow;
+}
+
+
+
+module.exports = { createSecondaryWindow };
 // Merr IP-në lokale të kompjuterit
 function getLocalIPAddress() {
   const networkInterfaces = os.networkInterfaces();
   for (const interfaceName in networkInterfaces) {
     for (const iface of networkInterfaces[interfaceName]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        console.log('arsen c')
         return iface.address;
       }
     }
@@ -46,49 +86,69 @@ function getLocalIPAddress() {
 const ipAddress = getLocalIPAddress();
 
 // End-point për shkarkimin e folderit në format ZIP
-expressApp.get('/download', (req, res) => {
+// End-point për shkarkimin e folderit në format ZIP ose skedarët individualë
+expressApp.get('/download', async (req, res) => {
   const folderPath = req.query.folder;
-  const folderName = path.basename(folderPath);
-  const zipPath = path.join(app.getPath('userData'), `${folderName}.zip`);
+  const isZip = req.query.zip === 'true';
 
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  const output = fs.createWriteStream(zipPath);
+  if (!folderPath || !fs.existsSync(folderPath)) {
+    return res.status(400).send('Folder not found.');
+  }
 
-  output.on('close', async () => {
-    try {
-      res.download(zipPath, `${folderName}.zip`, async () => {
-        try {
-          await fs.promises.unlink(zipPath);
-        } catch (err) {
-          console.error('Error deleting ZIP:', err);
-        }
-      });
+  if (isZip) {
+    const folderName = path.basename(folderPath);
+    res.attachment(`${folderName}.zip`);
+    const archive = archiver('zip', { zlib: { level: 2 } });
 
-      // Dërgo një ngjarje për të treguar që transferimi ka mbaruar
-      mainWindow.webContents.send('transfer-complete', 'Transferimi u krye me sukses!');
-    } catch (err) {
-      console.error('Error during file download:', err);
-      res.status(500).send('Error downloading file');
-    }
-  });
+    const files = fs.readdirSync(folderPath);
+    let totalSize = 0;
+    
+    files.forEach(file => {
+      const filePath = path.join(folderPath, file);
+      const stats = fs.statSync(filePath);
 
-  archive.on('progress', (progress) => {
-    if (progress.entries && progress.entries.total) {
-      mainWindow.webContents.send('zip-progress', progress.entries.total);
-    }
-  });
+      if (stats.isFile()) {
+        totalSize += stats.size;
+        archive.file(filePath, {
+          name: file,
+          stats: stats // Ruajtja e metadata (timestamps)
+        });
+      }
+    });
 
-  archive.pipe(output);
-  archive.directory(folderPath, false);
-  archive.finalize();
+    archive.on('progress', (data) => {
+      mainWindow.webContents.send('download-complete', '');
+      let progress = (data.fs.processedBytes / totalSize) * 100;
+      console.log(`Progress: ${progress.toFixed(2)}%`);
+      mainWindow.webContents.send('download-progress', progress.toFixed(2));
+    });
+
+    archive.on('progress', (data) => {
+      secondaryWindow.webContents.send('download-complete', '');
+      let progress = (data.fs.processedBytes / totalSize) * 100;
+      console.log(`Progress: ${progress.toFixed(2)}%`);
+      secondaryWindow.webContents.send('download-progress', progress.toFixed(2));
+    });
+
+    archive.on('end', () => {
+      console.log('Transferimi u krye me sukses!');
+      mainWindow.webContents.send('download-complete', 'Transferimi u krye me sukses!');
+      secondaryWindow.webContents.send('download-complete', 'Transferimi u krye me sukses!');
+
+    });
+
+    archive.pipe(res);
+    await archive.finalize();
+  }
 });
 
 const getAvailablePort = async (startingPort = 4040) => {
+  if (selectedPort) return selectedPort; // Përdor portin ekzistues
   let port = startingPort;
   while (true) {
     const isPortOpen = await isPortInUse(port);
     if (!isPortOpen) {
-      // console.log(port,'=-=>> port open')
+      selectedPort = port;
       return port;
     }
     port++;
@@ -104,36 +164,92 @@ const isPortInUse = (port) => {
   });
 };
 // Logjika për zgjedhjen e folderit dhe krijimin e QR kodit
+let secondaryWindow = null;
+
 ipcMain.handle('select-folder', async () => {
+  mainWindow.webContents.send('download-complete', '');
+  mainWindow.webContents.send('download-progress', 0);
+  mainWindow.webContents.send('transfer-message-clear');
+
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
   });
 
   if (!result.canceled) {
     const folderPath = result.filePaths[0];
-    const folderName = folderPath.split('/').pop();  // Merr emrin e folderit
+    const folderName = folderPath.split('/').pop();
+    const folderNameDisplay = path.basename(folderPath);
 
-    // Kërko një port të lirë dhe starto serverin
     if (!server) {
       const availablePort = await getAvailablePort();
       server = expressApp.listen(availablePort, () => console.log(`Server running on port ${availablePort}`));
     }
 
-    // Gjenero URL dhe QR kod
-    const localURL = `http://${ipAddress}:${server.address().port}/download?folder=${encodeURIComponent(folderPath)}`;
-    const qrCodeData = await qrcode.toDataURL(localURL);
+    // URL për shkarkimin e folderit ZIP për Android
+    const urlZip = `http://${ipAddress}:${selectedPort}/download?folder=${encodeURIComponent(folderPath)}&zip=true`;
 
-    return { qrCodeData, folderName };  // Dërgo QR kodin dhe emrin e folderit
+    // URL për shkarkimin e skedarëve individuale për iPhone
+    const urlFolder = `http://${ipAddress}:${selectedPort}/download?folder=${encodeURIComponent(folderPath)}&zip=true`;
+
+    // Generimi i QR kodeve për të dyja opsionet
+    const qrCodeZip = await qrcode.toDataURL(urlZip);
+    const qrCodeFolder = await qrcode.toDataURL(urlFolder);
+
+    // Shfaq QR kodin në dritaren kryesore
+    mainWindow.webContents.send('show-qr-code', qrCodeZip);
+
+    // Mbyll dritaren e vjetër nëse ekziston
+    if (secondaryWindow) {
+      secondaryWindow.close();
+      secondaryWindow = null;
+    }
+
+    // Funksioni për krijimin e dritares të dytë (për mini monitor)
+    const displays = screen.getAllDisplays();
+    const secondaryDisplay = displays.length > 1 ? displays[0] : displays[1]; // Përdorim ekranin e dytë nëse ekziston
+
+    secondaryWindow = new BrowserWindow({
+      width: secondaryDisplay.bounds.width,
+      height: secondaryDisplay.bounds.height,
+      x: secondaryDisplay.bounds.x,
+      y: secondaryDisplay.bounds.y,
+      fullscreen: true, // Aktivizon fullscreen
+      kiosk: true, // Heq taskbar dhe mundësinë për të mbyllur dritaren me ALT+F4
+      alwaysOnTop: true,
+      frame: false, // Hiq kornizën
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+        enableRemoteModule: true,
+      },
+    })
+
+    secondaryWindow.loadFile('display.html');
+
+    secondaryWindow.webContents.once('did-finish-load', () => {
+      secondaryWindow.webContents.send('update-qr-codes', { 
+        android: qrCodeZip,
+        iphone: qrCodeFolder,
+        folderName: folderNameDisplay
+      });
+    });
+
+    return [
+      { title: 'Android ZIP', qrCode: qrCodeZip }, // QR kodi për shkarkimin e ZIP
+      { title: 'iPhone Jo ZIP', qrCode: qrCodeFolder }, // QR kodi për shkarkimin e skedarëve individualë
+      {folderName: folderNameDisplay}
+    ];
   }
 
   return null;
 });
 
+
+
 // Krijo dritaren kur aplikacioni është gati
 app.whenReady().then(() => {
-  console.log('App is ready!'); // Ky log do të shfaqet përpara krijimit të dritares
-  createWindow();
-});console.log('App is ready!')
+  mainWindow = createWindow();
+});
 
 // Dërgo ndodhinë për mbylljen e aplikacionit kur dritaret mbyllen
 app.on('window-all-closed', () => {

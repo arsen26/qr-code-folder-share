@@ -49,11 +49,16 @@
       transform: scale(0.95);
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
-
-    #qr-code {
+    #qr-code-android{
+      margin-right: 10px;
+    }
+    #qr-code-iphone{
+      margin-left: 10px;
+    }
+    .qr-code {
       margin-top: 30px;
       display: flex;
-      justify-content: center;
+      justify-content: space-around;
       align-items: center;
       background: rgba(255, 255, 255, 0.15);
       padding: 30px;
@@ -63,7 +68,7 @@
       animation: fadeIn 1.5s ease-in-out;
     }
 
-    #qr-code img {
+    .qr-code img {
       max-width: 250px;
       height: auto;
       border-radius: 12px;
@@ -106,45 +111,71 @@
       animation: slideBackground 6s ease infinite;
     }
 
-    #progress-bar{
-      width: 0%; background-color: #4CAF50; height: 12px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); transition: width 0.3s ease;
+    #download-progress {
+      width: 0%; 
+      background-color: #4CAF50; 
+      height: 12px; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); 
+      transition: width 0.3s ease;
     }
-    
+    .container-qr-code{
+      display: flex;
+      flex-direction: row;
+      justify-content: space-around;
+    }
   </style>
 </head>
 <body>
   <h1>QR Code Folder Sharing</h1>
   <button id="select-folder">Select Folder</button>
-  <div id="qr-code"></div>
-  <div id="folder-name"></div>
-  <div id="progress" style="margin-top: 20px; text-align: center; font-family: Arial, sans-serif;">
-    <p id="progress-text" style="font-size: 1.2rem; color: #444; font-weight: 600;">0%</p>
-    <div id="progress-bar" style=""></div>
-    <div id="success-message" style="margin-top: 20px; font-size: 1.2rem; color: green; display: none;">Transferimi u krye me sukses!</div>
-
+  <div class="container-qr-code">
+    <div>
+       <div class="qr-code" id="qr-code-android"></div>
+  <div id="android-title"></div>
+    </div>
+   <div>
+     <div class="qr-code" id="qr-code-iphone"></div>
+  <div id="iphone-title"></div>
+   </div>
   </div>
   
+ 
+  <div id="folder-name"></div>
+  <div id="progress" style="margin-top: 20px; text-align: center; font-family: Arial, sans-serif;">
+    <p id="progress-text" style="font-size: 1.2rem; color: #ffffff; font-weight: 600;">0%</p>
+    <div id="download-progress"></div>
+    <div id="success-message" style="margin-top: 20px; font-size: 1.2rem; color: green; display: none;">Transferimi u krye me sukses!</div>
+  </div>
 
   <script>
     const { ipcRenderer } = require('electron');
 
+    document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('select-folder').addEventListener('click', async () => {
-      const { qrCodeData, folderName } = await ipcRenderer.invoke('select-folder');
+      const qrCodeData = await ipcRenderer.invoke('select-folder');
+
       if (qrCodeData) {
-        document.getElementById('qr-code').innerHTML = `<img src="${qrCodeData}" alt="QR Code">`;
-        document.getElementById('folder-name').textContent = `Selected Folder: ${folderName}`;
+        document.getElementById('qr-code-android').innerHTML = `<img src="${qrCodeData[0].qrCode}" alt="QR Code Android">`;
+        document.getElementById('qr-code-iphone').innerHTML = `<img src="${qrCodeData[1].qrCode}" alt="QR Code iPhone">`;
+        document.getElementById('folder-name').innerHTML = `<h4>${qrCodeData[2].folderName}</h4>`;
+        document.getElementById('android-title').textContent = qrCodeData[0].title;
+        document.getElementById('iphone-title').textContent = qrCodeData[1].title;
       }
     });
-    // Pjesa që merr përqindjen dhe azhurnon progresin
-ipcRenderer.on('zip-progress', (event, percent) => {
-  console.log(`Progress: ${Math.round(percent)}%`); // Për debug
-  document.getElementById('progress-text').textContent = `${Math.round(percent)}%`;
-  document.getElementById('progress-bar').style.width = `${percent}%`;
+  });
+
+    // Përditëson progresin e zippimit
+    ipcRenderer.on('download-progress', (event, percent) => {
+  document.getElementById('progress-text').textContent = `${(percent)}%`;
+  document.getElementById('download-progress').style.width = `${percent}%`;
 });
-ipcRenderer.on('transfer-complete', (event, message) => {
-      document.getElementById('success-message').textContent = message;
-      document.getElementById('success-message').style.display = 'block'; // Shfaq mesazhin
-    });
+
+    // Mesazh kur transferimi përfundon
+    ipcRenderer.on('download-complete', (event, message) => {
+  document.getElementById('success-message').textContent = message;
+  document.getElementById('success-message').style.display = 'block';
+});
   </script>
 </body>
 </html>
