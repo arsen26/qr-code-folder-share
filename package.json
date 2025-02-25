@@ -1,6 +1,6 @@
 {
-  "name": "qr-folder-sharing",
-  "version": "1.0.0",
+  "name": "ace-share",
+  "version": "1.7.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -9,10 +9,10 @@
   },
   "build": {
     "appId": "com.arsen.cenollari",
-    "productName": "QR CODE GENERATOR",
+    "productName": "Ace Share",
     "win": {
       "target": "nsis",
-      "icon": "/asset/logo.ico"
+      "icon": "/assets/LogoProgrami.ico"
     },
     "directories": {
       "output": "dist"
@@ -28,7 +28,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "electron": "^34.0.1",
+    "electron": "^34.2.0",
     "electron-builder": "^25.1.8"
   }
 }

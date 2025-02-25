@@ -204,25 +204,26 @@ ipcMain.handle('select-folder', async () => {
       secondaryWindow = null;
     }
 
-    // Funksioni për krijimin e dritares të dytë (për mini monitor)
     const displays = screen.getAllDisplays();
-    const secondaryDisplay = displays.length > 1 ? displays[0] : displays[1]; // Përdorim ekranin e dytë nëse ekziston
-
+    const smallestDisplay = displays.reduce((prev, curr) => {
+      return (prev.bounds.width * prev.bounds.height < curr.bounds.width * curr.bounds.height) ? prev : curr;
+    });
+    
     secondaryWindow = new BrowserWindow({
-      width: secondaryDisplay.bounds.width,
-      height: secondaryDisplay.bounds.height,
-      x: secondaryDisplay.bounds.x,
-      y: secondaryDisplay.bounds.y,
-      fullscreen: true, // Aktivizon fullscreen
-      kiosk: true, // Heq taskbar dhe mundësinë për të mbyllur dritaren me ALT+F4
+      width: smallestDisplay.bounds.width,
+      height: smallestDisplay.bounds.height,
+      x: smallestDisplay.bounds.x,
+      y: smallestDisplay.bounds.y,
+      fullscreen: true,
+      kiosk: true,
       alwaysOnTop: true,
-      frame: false, // Hiq kornizën
+      frame: false,
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
         enableRemoteModule: true,
       },
-    })
+    });
 
     secondaryWindow.loadFile('display.html');
 
